@@ -18,7 +18,7 @@ const optionalNumber = z
 
 const querySchema = z
   .object({
-    city: z.string().trim().min(1, 'city is required').transform((s) => s.toLowerCase()),
+    city: z.string({ error: 'city is required' }).trim().min(1, 'city is required').transform((s) => s.toLowerCase()),
     minPrice: optionalNumber,
     maxPrice: optionalNumber,
     simulateFailure: z.enum(['supplierA', 'supplierB', 'both']).optional(),
