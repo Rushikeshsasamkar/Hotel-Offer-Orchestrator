@@ -1,26 +1,21 @@
 import { Client, Connection } from '@temporalio/client';
 import { config } from '../config';
 import { logger } from '../logger';
+import { retry } from '../retry';
 
 let connection: Connection | undefined;
 let client: Client | undefined;
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
 /** Connect with retry (Temporal can take several seconds to boot). */
 export async function connectTemporal(maxAttempts = 30, delayMs = 2000): Promise<Client> {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      connection = await Connection.connect({ address: config.temporalAddress, connectTimeout: 5000 });
-      client = new Client({ connection });
-      logger.info({ address: config.temporalAddress }, 'connected to temporal');
-      return client;
-    } catch (err) {
-      if (attempt >= maxAttempts) throw err;
-      logger.warn({ attempt, err: (err as Error).message }, 'temporal not ready, retrying');
-      await sleep(delayMs);
-    }
-  }
+  connection = await retry(
+    () => Connection.connect({ address: config.temporalAddress, connectTimeout: 5000 }),
+    maxAttempts,
+    delayMs,
+  );
+  client = new Client({ connection });
+  logger.info({ address: config.temporalAddress }, 'connected to temporal');
+  return client;
 }
 
 export function getTemporalClient(): Client {

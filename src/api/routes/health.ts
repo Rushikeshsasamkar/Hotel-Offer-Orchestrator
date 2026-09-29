@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { config } from '../../config';
 import type { Deps } from '../deps';
+import type { SupplierKey } from '../../types';
 
 interface Check {
   status: 'up' | 'down';
@@ -18,7 +19,7 @@ async function timed(fn: () => Promise<void>): Promise<Check> {
   }
 }
 
-async function pingSupplier(path: 'supplierA' | 'supplierB'): Promise<void> {
+async function pingSupplier(path: SupplierKey): Promise<void> {
   const res = await fetch(`${config.supplierBaseUrl}/${path}/hotels?city=health`, {
     signal: AbortSignal.timeout(2000),
   });

@@ -3,23 +3,10 @@ import { config } from '../config';
 import { logger } from '../logger';
 import * as activities from '../temporal/activities';
 import { closeRedis } from '../redis/client';
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-async function connect(maxAttempts = 30, delayMs = 2000): Promise<NativeConnection> {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await NativeConnection.connect({ address: config.temporalAddress });
-    } catch (err) {
-      if (attempt >= maxAttempts) throw err;
-      logger.warn({ attempt, err: (err as Error).message }, 'temporal not ready, retrying');
-      await sleep(delayMs);
-    }
-  }
-}
+import { retry } from '../retry';
 
 async function main(): Promise<void> {
-  const connection = await connect();
+  const connection = await retry(() => NativeConnection.connect({ address: config.temporalAddress }));
   const worker = await Worker.create({
     connection,
     taskQueue: config.taskQueue,

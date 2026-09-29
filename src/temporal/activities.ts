@@ -3,7 +3,7 @@ import { config } from '../config';
 import { logger } from '../logger';
 import { getRedis } from '../redis/client';
 import { hotelKey, saveOffers } from '../redis/hotelStore';
-import type { HotelOffer, SupplierHotel } from '../types';
+import type { HotelOffer, SupplierHotel, SupplierKey } from '../types';
 
 const payloadSchema = z.array(
   z.object({
@@ -17,7 +17,7 @@ const payloadSchema = z.array(
 
 const FETCH_TIMEOUT_MS = 3000;
 
-async function fetchSupplier(path: 'supplierA' | 'supplierB', city: string, fail: boolean): Promise<SupplierHotel[]> {
+async function fetchSupplier(path: SupplierKey, city: string, fail: boolean): Promise<SupplierHotel[]> {
   const url = new URL(`${config.supplierBaseUrl}/${path}/hotels`);
   url.searchParams.set('city', city);
   if (fail) url.searchParams.set('fail', 'true');
@@ -44,7 +44,7 @@ export async function fetchSupplierB(city: string, fail = false): Promise<Suppli
 }
 
 /** TTL for request-scoped partial-result keys (canonical keys use CACHE_TTL_SECONDS). */
-export const PARTIAL_TTL_SECONDS = 60;
+const PARTIAL_TTL_SECONDS = 60;
 
 /** The workflow chooses `key`: canonical for full results, request-scoped for partial ones. */
 export async function saveHotelsToRedis(city: string, offers: HotelOffer[], key: string): Promise<void> {
