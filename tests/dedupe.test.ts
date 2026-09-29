@@ -1,6 +1,12 @@
 import { selectBestOffers } from '../src/domain/dedupe';
 
-const h = (name: string, price: number, commissionPct = 10) => ({ name, price, commissionPct });
+const h = (name: string, price: number, commissionPct = 10) => ({
+  hotelId: `h-${name}-${price}`,
+  city: 'delhi',
+  name,
+  price,
+  commissionPct,
+});
 
 describe('selectBestOffers', () => {
   it('picks Supplier A when A is cheaper on overlap', () => {

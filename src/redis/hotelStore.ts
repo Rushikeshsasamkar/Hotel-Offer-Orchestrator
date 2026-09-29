@@ -1,16 +1,15 @@
 import type Redis from 'ioredis';
 import type { HotelOffer } from '../types';
 
-export const hotelKey = (city: string): string => `hotels:${city.trim().toLowerCase()}`;
+export { hotelKey, partialHotelKey } from '../domain/keys';
 
-/** Atomically replace the offer set for a city: MULTI DEL, ZADD*, EXPIRE, EXEC. */
+/** Atomically replace the offer set at `key`: MULTI DEL, ZADD*, EXPIRE, EXEC. */
 export async function saveOffers(
   redis: Redis,
-  city: string,
+  key: string,
   offers: HotelOffer[],
   ttlSeconds: number,
 ): Promise<void> {
-  const key = hotelKey(city);
   const tx = redis.multi().del(key);
   if (offers.length > 0) {
     for (const o of offers) tx.zadd(key, o.price, JSON.stringify(o));
@@ -22,14 +21,9 @@ export async function saveOffers(
 }
 
 /** Price-range query executed inside Redis via ZRANGEBYSCORE (inclusive bounds). */
-export async function queryOffers(
-  redis: Redis,
-  city: string,
-  min?: number,
-  max?: number,
-): Promise<HotelOffer[]> {
+export async function queryOffers(redis: Redis, key: string, min?: number, max?: number): Promise<HotelOffer[]> {
   const members = await redis.zrangebyscore(
-    hotelKey(city),
+    key,
     min === undefined ? '-inf' : String(min),
     max === undefined ? '+inf' : String(max),
   );

@@ -39,9 +39,10 @@ export function hotelsRouter(deps: Deps): Router {
     }
     const { city, minPrice, maxPrice, simulateFailure } = parsed.data;
     try {
-      const { failedSuppliers } = await deps.runWorkflow({ city, simulateFailure });
-      // Redis is the single read path: price filtering happens in ZRANGEBYSCORE.
-      const offers = await deps.queryOffers(city, minPrice, maxPrice);
+      const { failedSuppliers, redisKey } = await deps.runWorkflow({ city, simulateFailure });
+      // Redis is the single read path: price filtering happens in ZRANGEBYSCORE, against the key
+      // this request's own workflow wrote (never a key another request may have overwritten).
+      const offers = await deps.queryOffers(redisKey, minPrice, maxPrice);
       if (failedSuppliers.length > 0) res.setHeader('X-Partial-Results', failedSuppliers.join(','));
       res.json(offers);
     } catch (err) {

@@ -15,7 +15,7 @@ export class TemporalUnavailableError extends Error {}
 
 export interface Deps {
   runWorkflow(input: WorkflowInput): Promise<WorkflowOutput>;
-  queryOffers(city: string, min?: number, max?: number): Promise<HotelOffer[]>;
+  queryOffers(redisKey: string, min?: number, max?: number): Promise<HotelOffer[]>;
   pingRedis(): Promise<void>;
   checkTemporal(): Promise<void>;
 }
@@ -23,20 +23,24 @@ export interface Deps {
 export const defaultDeps: Deps = {
   async runWorkflow(input) {
     let timer: NodeJS.Timeout | undefined;
+    // The deadline covers start() too: with Temporal unreachable, start() itself hangs.
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new TemporalUnavailableError('workflow timed out')),
+        config.workflowTimeoutMs,
+      );
+    });
     try {
-      const handle = await getTemporalClient().workflow.start('hotelOffersWorkflow', {
-        taskQueue: config.taskQueue,
-        workflowId: `hotels-${input.city}-${randomUUID()}`,
-        args: [input],
-        workflowExecutionTimeout: '30s',
-      });
-      const timeout = new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () => reject(new TemporalUnavailableError('workflow timed out')),
-          config.workflowTimeoutMs,
-        );
-      });
-      return await Promise.race([handle.result() as Promise<WorkflowOutput>, timeout]);
+      const run = async () => {
+        const handle = await getTemporalClient().workflow.start('hotelOffersWorkflow', {
+          taskQueue: config.taskQueue,
+          workflowId: `hotels-${input.city}-${randomUUID()}`,
+          args: [input],
+          workflowExecutionTimeout: '30s',
+        });
+        return (await handle.result()) as WorkflowOutput;
+      };
+      return await Promise.race([run(), timeout]);
     } catch (err) {
       if (err instanceof TemporalUnavailableError) throw err;
       if (
@@ -51,7 +55,7 @@ export const defaultDeps: Deps = {
       clearTimeout(timer);
     }
   },
-  queryOffers: (city, min, max) => queryOffers(getRedis(), city, min, max),
+  queryOffers: (redisKey, min, max) => queryOffers(getRedis(), redisKey, min, max),
   async pingRedis() {
     await getRedis().ping();
   },

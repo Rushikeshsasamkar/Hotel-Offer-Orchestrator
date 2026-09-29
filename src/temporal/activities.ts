@@ -2,13 +2,15 @@ import { z } from 'zod';
 import { config } from '../config';
 import { logger } from '../logger';
 import { getRedis } from '../redis/client';
-import { saveOffers } from '../redis/hotelStore';
+import { hotelKey, saveOffers } from '../redis/hotelStore';
 import type { HotelOffer, SupplierHotel } from '../types';
 
 const payloadSchema = z.array(
   z.object({
+    hotelId: z.string().min(1),
     name: z.string().min(1),
     price: z.number().finite().nonnegative(),
+    city: z.string().min(1),
     commissionPct: z.number().finite().nonnegative(),
   }),
 );
@@ -41,7 +43,12 @@ export async function fetchSupplierB(city: string, fail = false): Promise<Suppli
   return fetchSupplier('supplierB', city, fail);
 }
 
-export async function saveHotelsToRedis(city: string, offers: HotelOffer[]): Promise<void> {
-  await saveOffers(getRedis(), city, offers, config.cacheTtlSeconds);
-  logger.info({ city, count: offers.length }, 'offers saved to redis');
+/** TTL for request-scoped partial-result keys (canonical keys use CACHE_TTL_SECONDS). */
+export const PARTIAL_TTL_SECONDS = 60;
+
+/** The workflow chooses `key`: canonical for full results, request-scoped for partial ones. */
+export async function saveHotelsToRedis(city: string, offers: HotelOffer[], key: string): Promise<void> {
+  const ttl = key === hotelKey(city) ? config.cacheTtlSeconds : PARTIAL_TTL_SECONDS;
+  await saveOffers(getRedis(), key, offers, ttl);
+  logger.info({ city, key, ttl, count: offers.length }, 'offers saved to redis');
 }

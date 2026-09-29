@@ -86,7 +86,7 @@ curl 'localhost:3000/api/hotels?city=delhi&minPrice=5000&maxPrice=6000'
 
 ### Mock suppliers
 
-`GET /supplierA/hotels?city=delhi`, `GET /supplierB/hotels?city=delhi`. Without `city` all hotels are returned. `?fail=true` returns `503`. Cities with data: `delhi`, `mumbai`.
+`GET /supplierA/hotels?city=delhi`, `GET /supplierB/hotels?city=delhi`. Records look like `{ hotelId, name, price, city, commissionPct }` (ids `a*` / `b*`). Without `city` all hotels are returned. `?fail=true` returns `503`. Cities with data: `delhi`, `mumbai`.
 
 ### `GET /health`
 
@@ -94,7 +94,7 @@ Checks Supplier A, Supplier B (2s timeout, in parallel), Redis `PING` and the Te
 
 ## Redis data model
 
-- Key `hotels:<city>` (lowercased), a sorted set. Score = `price`, member = JSON of the offer `{"name","price","supplier","commissionPct"}`.
+- Key `hotels:<city>` (lowercased), a sorted set. Partial results (one supplier failed) go to `hotels:<city>:partial:<workflowId>` with a 60s TTL instead; key derivation lives in `src/domain/keys.ts` and the workflow returns the key it wrote so the API reads exactly that key. Score = `price`, member = JSON of the offer `{"name","price","supplier","commissionPct"}`.
 - Written by `MULTI` / `DEL` / `ZADD`... / `EXPIRE` / `EXEC`, so readers never see a half-written set. An empty result just deletes the key.
 - Read with `ZRANGEBYSCORE hotels:<city> <min|-inf> <max|+inf>`.
 
@@ -118,7 +118,7 @@ Implemented in `src/domain/dedupe.ts` (pure, unit tested):
 - Suppliers are fetched with `Promise.allSettled`. One failure gives a partial result, both failures give a non-retryable `AllSuppliersDown` failure which the API maps to `502`.
 - API and worker retry the Temporal connection on boot (30 attempts, 2s apart). SIGTERM triggers graceful shutdown.
 
-Known trade-off: `hotels:<city>` is a shared cache, so the latest workflow run for a city overwrites the previous one. A request made with `simulateFailure` (or hitting a real partial outage) therefore leaves a partial set in Redis until the next successful request or TTL expiry. Concurrent requests for the same city can also read each other's freshest set.
+Cache note: `hotels:<city>` is a shared cache holding the latest *complete* result for a city; it is only written when both suppliers responded. A partial run (a real outage or the `simulateFailure` test hook) writes to its own request-scoped key `hotels:<city>:partial:<workflowId>` (60s TTL), which only that request reads, so a partial result never overwrites or leaks into the canonical set. Concurrent complete requests for the same city can still read each other's freshest set.
 
 ## Tests
 

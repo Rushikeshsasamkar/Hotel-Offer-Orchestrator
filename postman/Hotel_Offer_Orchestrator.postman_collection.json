@@ -383,7 +383,7 @@
             "type": "text/javascript",
             "exec": [
               "pm.test('status is 200', () => pm.response.to.have.status(200));",
-              "pm.test('array of hotels', () => { const b = pm.response.json(); pm.expect(b).to.be.an('array').that.is.not.empty; pm.expect(b[0]).to.have.all.keys('name', 'price', 'commissionPct'); });"
+              "pm.test('array of hotels', () => { const b = pm.response.json(); pm.expect(b).to.be.an('array').that.is.not.empty; pm.expect(b[0]).to.have.all.keys('hotelId', 'name', 'price', 'city', 'commissionPct'); });"
             ]
           }
         }
@@ -418,7 +418,7 @@
             "type": "text/javascript",
             "exec": [
               "pm.test('status is 200', () => pm.response.to.have.status(200));",
-              "pm.test('array of hotels', () => { const b = pm.response.json(); pm.expect(b).to.be.an('array').that.is.not.empty; pm.expect(b[0]).to.have.all.keys('name', 'price', 'commissionPct'); });"
+              "pm.test('array of hotels', () => { const b = pm.response.json(); pm.expect(b).to.be.an('array').that.is.not.empty; pm.expect(b[0]).to.have.all.keys('hotelId', 'name', 'price', 'city', 'commissionPct'); });"
             ]
           }
         }

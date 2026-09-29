@@ -4,6 +4,8 @@ export type SimulateFailure = SupplierKey | 'both';
 
 /** Raw hotel record as returned by a supplier. */
 export interface SupplierHotel {
+  hotelId: string;
+  city: string;
   name: string;
   price: number;
   commissionPct: number;
@@ -25,4 +27,6 @@ export interface WorkflowInput {
 export interface WorkflowOutput {
   offers: HotelOffer[];
   failedSuppliers: SupplierKey[];
+  /** Redis key holding this run's offers (canonical for full results, request-scoped for partial). */
+  redisKey: string;
 }

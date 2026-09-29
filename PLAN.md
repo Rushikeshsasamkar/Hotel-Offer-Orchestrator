@@ -114,11 +114,11 @@ Collection variable `baseUrl=http://localhost:3000`. Requests with test scripts 
 Overview, architecture diagram, run with Docker (`docker compose up --build`), run locally (redis + temporal via compose, `npm run dev:api`, `npm run dev:worker`), env vars table, endpoint docs with examples, Redis data model, dedupe/tie rules, failure handling, tests, Postman import, Temporal UI at http://localhost:8233.
 
 ## 7. Acceptance checks (Opus will verify)
-- [ ] `npm run build` and `npm test` pass
-- [ ] `docker compose up --build -d` → all services healthy
-- [ ] `curl 'localhost:3000/api/hotels?city=delhi'` → deduped, cheapest per name
-- [ ] `...&minPrice=5000&maxPrice=6000` → filtered; `redis-cli ZRANGEBYSCORE` confirms data lives in Redis
-- [ ] `city=atlantis` → `[]`; `simulateFailure=supplierA` → partial; `both` → 502
-- [ ] `/health` reports both suppliers
-- [ ] Workflow executions visible in Temporal UI
-- [ ] Postman collection is valid v2.1 JSON
+- [x] `npm run build` and `npm test` pass
+- [x] `docker compose up --build -d` → all services healthy
+- [x] `curl 'localhost:3000/api/hotels?city=delhi'` → deduped, cheapest per name
+- [x] `...&minPrice=5000&maxPrice=6000` → filtered; `redis-cli ZRANGEBYSCORE` confirms data lives in Redis
+- [x] `city=atlantis` → `[]`; `simulateFailure=supplierA` → partial; `both` → 502
+- [x] `/health` reports both suppliers
+- [x] Workflow executions visible in Temporal UI
+- [x] Postman collection is valid v2.1 JSON

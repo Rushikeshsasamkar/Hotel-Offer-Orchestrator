@@ -28,23 +28,39 @@ afterAll(async () => {
   }
 });
 
+describe('hotelKey', () => {
+  it('derives the canonical key', () => {
+    expect(hotelKey(' Delhi ')).toBe('hotels:delhi');
+  });
+});
+
 describe('hotelStore (real Redis)', () => {
+  it('writes to a request-scoped key never touch the canonical key', async () => {
+    if (!redis) return;
+    const partial = `${hotelKey(city)}:partial:wf-1`;
+    await saveOffers(redis, hotelKey(city), [o('Real', 100)], 60);
+    await saveOffers(redis, partial, [o('Partial', 1)], 60);
+    expect((await queryOffers(redis, hotelKey(city))).map((x) => x.name)).toEqual(['Real']);
+    expect((await queryOffers(redis, partial)).map((x) => x.name)).toEqual(['Partial']);
+    await redis.del(partial);
+  });
+
   it('saves and queries with price bounds', async () => {
     if (!redis) return;
-    await saveOffers(redis, city, [o('A', 100), o('B', 200), o('C', 300)], 60);
-    expect((await queryOffers(redis, city)).map((x) => x.name)).toEqual(['A', 'B', 'C']);
-    expect((await queryOffers(redis, city, 150, 300)).map((x) => x.name)).toEqual(['B', 'C']);
-    expect((await queryOffers(redis, city, undefined, 100)).map((x) => x.name)).toEqual(['A']);
-    expect((await queryOffers(redis, city, 200)).map((x) => x.name)).toEqual(['B', 'C']);
+    await saveOffers(redis, hotelKey(city), [o('A', 100), o('B', 200), o('C', 300)], 60);
+    expect((await queryOffers(redis, hotelKey(city))).map((x) => x.name)).toEqual(['A', 'B', 'C']);
+    expect((await queryOffers(redis, hotelKey(city), 150, 300)).map((x) => x.name)).toEqual(['B', 'C']);
+    expect((await queryOffers(redis, hotelKey(city), undefined, 100)).map((x) => x.name)).toEqual(['A']);
+    expect((await queryOffers(redis, hotelKey(city), 200)).map((x) => x.name)).toEqual(['B', 'C']);
     expect(await redis.ttl(hotelKey(city))).toBeGreaterThan(0);
   });
 
   it('replaces the previous set atomically, and empty list clears it', async () => {
     if (!redis) return;
-    await saveOffers(redis, city, [o('A', 100)], 60);
-    await saveOffers(redis, city, [o('Z', 999)], 60);
-    expect((await queryOffers(redis, city)).map((x) => x.name)).toEqual(['Z']);
-    await saveOffers(redis, city, [], 60);
-    expect(await queryOffers(redis, city)).toEqual([]);
+    await saveOffers(redis, hotelKey(city), [o('A', 100)], 60);
+    await saveOffers(redis, hotelKey(city), [o('Z', 999)], 60);
+    expect((await queryOffers(redis, hotelKey(city))).map((x) => x.name)).toEqual(['Z']);
+    await saveOffers(redis, hotelKey(city), [], 60);
+    expect(await queryOffers(redis, hotelKey(city))).toEqual([]);
   });
 });

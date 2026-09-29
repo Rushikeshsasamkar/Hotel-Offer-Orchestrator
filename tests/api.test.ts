@@ -1,13 +1,14 @@
 import request from 'supertest';
 import { createApp } from '../src/api/app';
 import { AllSuppliersDownError, TemporalUnavailableError, type Deps } from '../src/api/deps';
+import { hotelKey, partialHotelKey } from '../src/redis/hotelStore';
 import type { HotelOffer } from '../src/types';
 
 const offers: HotelOffer[] = [{ name: 'X', price: 5500, supplier: 'Supplier B', commissionPct: 10 }];
 
 function deps(over: Partial<Deps> = {}): Deps {
   return {
-    runWorkflow: jest.fn().mockResolvedValue({ offers, failedSuppliers: [] }),
+    runWorkflow: jest.fn().mockResolvedValue({ offers, failedSuppliers: [], redisKey: 'hotels:delhi' }),
     queryOffers: jest.fn().mockResolvedValue(offers),
     pingRedis: jest.fn().mockResolvedValue(undefined),
     checkTemporal: jest.fn().mockResolvedValue(undefined),
@@ -22,7 +23,7 @@ describe('GET /api/hotels', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual(offers);
     expect(d.runWorkflow).toHaveBeenCalledWith({ city: 'delhi', simulateFailure: undefined });
-    expect(d.queryOffers).toHaveBeenCalledWith('delhi', 5000, 6000);
+    expect(d.queryOffers).toHaveBeenCalledWith('hotels:delhi', 5000, 6000);
     expect(res.headers['x-partial-results']).toBeUndefined();
   });
 
@@ -42,11 +43,21 @@ describe('GET /api/hotels', () => {
   });
 
   it('sets X-Partial-Results when one supplier failed', async () => {
-    const d = deps({ runWorkflow: jest.fn().mockResolvedValue({ offers, failedSuppliers: ['supplierA'] }) });
+    const d = deps({ runWorkflow: jest.fn().mockResolvedValue({ offers, failedSuppliers: ['supplierA'], redisKey: 'hotels:delhi:partial:wf-1' }) });
     const res = await request(createApp(d)).get('/api/hotels?city=delhi&simulateFailure=supplierA');
     expect(res.status).toBe(200);
     expect(res.headers['x-partial-results']).toBe('supplierA');
     expect(d.runWorkflow).toHaveBeenCalledWith({ city: 'delhi', simulateFailure: 'supplierA' });
+  });
+
+  it('queries the redis key returned by the workflow, not the canonical city key', async () => {
+    const redisKey = 'hotels:delhi:partial:wf-42';
+    const d = deps({
+      runWorkflow: jest.fn().mockResolvedValue({ offers, failedSuppliers: ['supplierA'], redisKey }),
+    });
+    await request(createApp(d)).get('/api/hotels?city=delhi&minPrice=1&simulateFailure=supplierA');
+    expect(d.queryOffers).toHaveBeenCalledTimes(1);
+    expect(d.queryOffers).toHaveBeenCalledWith(redisKey, 1, undefined);
   });
 
   it('502 when all suppliers are down', async () => {
@@ -70,12 +81,40 @@ describe('GET /api/hotels', () => {
   });
 });
 
+describe('partial-result isolation', () => {
+  it('a partial request leaves the canonical hotels:delhi key intact', async () => {
+    const store = new Map<string, HotelOffer[]>([[hotelKey('delhi'), offers]]);
+    const partialOffers: HotelOffer[] = [{ name: 'PartialOnly', price: 1, supplier: 'Supplier B', commissionPct: 1 }];
+    let n = 0;
+    const d = deps({
+      runWorkflow: jest.fn().mockImplementation(async ({ city, simulateFailure }) => {
+        if (!simulateFailure) {
+          store.set(hotelKey(city), offers);
+          return { offers, failedSuppliers: [], redisKey: hotelKey(city) };
+        }
+        const redisKey = partialHotelKey(city, `wf-${++n}`);
+        store.set(redisKey, partialOffers);
+        return { offers: partialOffers, failedSuppliers: ['supplierA'], redisKey };
+      }),
+      queryOffers: jest.fn().mockImplementation(async (key: string) => store.get(key) ?? []),
+    });
+    const app = createApp(d);
+    const partial = await request(app).get('/api/hotels?city=delhi&simulateFailure=supplierA');
+    expect(partial.body).toEqual(partialOffers);
+    expect(store.get('hotels:delhi')).toEqual(offers);
+    expect(store.has('hotels:delhi:partial:wf-1')).toBe(true);
+    const real = await request(app).get('/api/hotels?city=delhi');
+    expect(real.body).toEqual(offers);
+  });
+});
+
 describe('mock suppliers', () => {
   it('filters by city and supports fail=true', async () => {
     const app = createApp(deps());
     const a = await request(app).get('/supplierA/hotels?city=Delhi');
     expect(a.status).toBe(200);
     expect(a.body.length).toBeGreaterThanOrEqual(5);
+    expect(a.body[0]).toEqual(expect.objectContaining({ hotelId: expect.stringMatching(/^a/), city: 'delhi' }));
     expect((await request(app).get('/supplierB/hotels?city=atlantis')).body).toEqual([]);
     expect((await request(app).get('/supplierB/hotels?city=delhi&fail=true')).status).toBe(503);
   });
