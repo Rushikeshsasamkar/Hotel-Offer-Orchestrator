@@ -1,3 +1,6 @@
 node_modules
 dist
 .env
+
+# Assessment brief (kept local, not published)
+*.docx
